@@ -330,4 +330,104 @@ try:
 
     user_input_encoded = pd.get_dummies(user_input_raw)
     user_input_encoded = user_input_encoded.reindex(
-        columns=X.columns,
+        columns=X.columns, fill_value=0
+    )
+
+    predicted_energy = model.predict(user_input_encoded)[0]
+
+    st.markdown("---")
+    st.success(
+        f"### ⚡ 시뮬레이션 결과 - 예상 에너지 소비량: **{predicted_energy:,.2f}"
+        " kWh**"
+    )
+
+  # =====================================================================
+  # [6단계] 다중 선형 회귀 모델 최종 평가 (R2, MSE, MAE 전격 포함)
+  # =====================================================================
+  elif menu == "6단계: 다중 선형 회귀 모델 최종 평가":
+    st.header("📌 6단계: 다중 선형 회귀 모델 최종 성능 평가")
+    st.write(
+        "학습된 모델의 성과 지표($R^2$, MSE, MAE)와 변수별 회귀 계수,"
+        " 실제값 vs 예측값 비교 그래프를 확인합니다."
+    )
+
+    if "trained_model" not in st.session_state:
+      df_sim = st.session_state.get("df_cleaned", df_raw)
+      base_df = df_sim.drop(columns=["SquareFootage"], errors="ignore")
+      if "Timestamp" in base_df.columns:
+        base_df = base_df.drop(columns=["Timestamp"])
+      df_encoded = pd.get_dummies(base_df, drop_first=True)
+      X = df_encoded.drop(columns=["EnergyConsumption"])
+      y = df_encoded["EnergyConsumption"]
+      X_train, X_test, y_train, y_test = train_test_split(
+          X, y, test_size=0.2, random_state=42
+      )
+      model = LinearRegression()
+      model.fit(X_train, y_train)
+      st.session_state["trained_model"] = model
+      st.session_state["X_columns"] = X.columns
+      st.session_state["X_test"] = X_test
+      st.session_state["y_test"] = y_test
+
+    model = st.session_state["trained_model"]
+    X_test = st.session_state["X_test"]
+    y_test = st.session_state["y_test"]
+    X_cols = st.session_state["X_columns"]
+
+    y_pred = model.predict(X_test)
+    r2 = r2_score(y_test, y_pred)
+    mse = mean_squared_error(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("결정 계수 (R² Score)", f"{r2:.4f}")
+    m2.metric("MSE (평균 제곱 오차)", f"{mse:.4f}")
+    m3.metric("MAE (평균 절대 오차)", f"{mae:.4f}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    eval_tab1, eval_tab2 = st.tabs([
+        "📋 모델 회귀 계수 (Weights) 분석",
+        "📈 실제값 vs 예측값 & 잔차 시각화",
+    ])
+
+    with eval_tab1:
+      st.subheader("변수별 회귀 계수(가중치) 확인 (`SquareFootage` 제외됨)")
+      coef_df = pd.DataFrame(
+          {"변수명 (Feature)": X_cols, "회귀 계수 (Coefficient)": model.coef_}
+      ).sort_values(by="회귀 계수 (Coefficient)", ascending=False)
+      st.dataframe(coef_df, use_container_width=True, hide_index=True)
+      st.success(f"📌 **모델 절편 (Intercept):** `{model.intercept_:.4f}`")
+
+    with eval_tab2:
+      st.subheader("모델 예측력 검증 그래프")
+      fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+      ax1.scatter(y_test, y_pred, alpha=0.5, color="royalblue", edgecolor="k")
+      ax1.plot(
+          [y_test.min(), y_test.max()],
+          [y_test.min(), y_test.max()],
+          "r--",
+          lw=2,
+          label="Ideal Fit",
+      )
+      ax1.set_xlabel("Actual Energy Consumption")
+      ax1.set_ylabel("Predicted Energy Consumption")
+      ax1.set_title("Actual vs Predicted Energy Consumption")
+      ax1.legend()
+      ax1.grid(True, linestyle="--", alpha=0.6)
+
+      residuals = y_test - y_pred
+      sns.histplot(residuals, kde=True, ax=ax2, color="purple", bins=30)
+      ax2.set_xlabel("Residual (Actual - Predicted)")
+      ax2.set_ylabel("Frequency")
+      ax2.set_title("Residual Distribution (Error Analysis)")
+      ax2.grid(True, linestyle="--", alpha=0.6)
+
+      st.pyplot(fig)
+
+except FileNotFoundError:
+  st.error(
+      "⚠️ 'Energy_consumption.csv' 파일을 찾을 수 없습니다. 폴더 위치를"
+      " 확인해주세요."
+  )
