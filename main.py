@@ -244,7 +244,7 @@ try:
     st.pyplot(fig)
 
   # =====================================================================
-  # [5단계] 실시간 예측 시뮬레이터 (SquareFootage 제외 모델 학습 적용)
+  # [5단계] 실시간 예측 시뮬레이터 (독립적으로 모델 학습 및 예측)
   # =====================================================================
   elif menu == "5단계: 실시간 예측 시뮬레이터":
     st.header("📌 5단계: 실시간 건물 에너지 소비량 예측 시뮬레이션")
@@ -268,13 +268,8 @@ try:
         X, y, test_size=0.2, random_state=42
     )
 
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-
-    st.session_state["trained_model"] = model
-    st.session_state["X_columns"] = X.columns
-    st.session_state["X_test"] = X_test
-    st.session_state["y_test"] = y_test
+    sim_model = LinearRegression()
+    sim_model.fit(X_train, y_train)
 
     sim_col1, sim_col2 = st.columns(2)
     with sim_col1:
@@ -333,7 +328,7 @@ try:
         columns=X.columns, fill_value=0
     )
 
-    predicted_energy = model.predict(user_input_encoded)[0]
+    predicted_energy = sim_model.predict(user_input_encoded)[0]
 
     st.markdown("---")
     st.success(
@@ -342,7 +337,7 @@ try:
     )
 
   # =====================================================================
-  # [6단계] 다중 선형 회귀 모델 최종 평가 (R2, MSE, MAE 전격 포함)
+  # [6단계] 다중 선형 회귀 모델 최종 평가 (독립적으로 모델 학습 및 평가)
   # =====================================================================
   elif menu == "6단계: 다중 선형 회귀 모델 최종 평가":
     st.header("📌 6단계: 다중 선형 회귀 모델 최종 성능 평가")
@@ -351,30 +346,25 @@ try:
         " 실제값 vs 예측값 비교 그래프를 확인합니다."
     )
 
-    if "trained_model" not in st.session_state:
-      df_sim = st.session_state.get("df_cleaned", df_raw)
-      base_df = df_sim.drop(columns=["SquareFootage"], errors="ignore")
-      if "Timestamp" in base_df.columns:
-        base_df = base_df.drop(columns=["Timestamp"])
-      df_encoded = pd.get_dummies(base_df, drop_first=True)
-      X = df_encoded.drop(columns=["EnergyConsumption"])
-      y = df_encoded["EnergyConsumption"]
-      X_train, X_test, y_train, y_test = train_test_split(
-          X, y, test_size=0.2, random_state=42
-      )
-      model = LinearRegression()
-      model.fit(X_train, y_train)
-      st.session_state["trained_model"] = model
-      st.session_state["X_columns"] = X.columns
-      st.session_state["X_test"] = X_test
-      st.session_state["y_test"] = y_test
+    df_eval = st.session_state.get("df_cleaned", df_raw)
 
-    model = st.session_state["trained_model"]
-    X_test = st.session_state["X_test"]
-    y_test = st.session_state["y_test"]
-    X_cols = st.session_state["X_columns"]
+    base_df = df_eval.drop(columns=["SquareFootage"], errors="ignore")
+    if "Timestamp" in base_df.columns:
+      base_df = base_df.drop(columns=["Timestamp"])
 
-    y_pred = model.predict(X_test)
+    df_encoded = pd.get_dummies(base_df, drop_first=True)
+    target_col = "EnergyConsumption"
+    X = df_encoded.drop(columns=[target_col])
+    y = df_encoded[target_col]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    eval_model = LinearRegression()
+    eval_model.fit(X_train, y_train)
+
+    y_pred = eval_model.predict(X_test)
     r2 = r2_score(y_test, y_pred)
     mse = mean_squared_error(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
@@ -394,10 +384,10 @@ try:
     with eval_tab1:
       st.subheader("변수별 회귀 계수(가중치) 확인 (`SquareFootage` 제외됨)")
       coef_df = pd.DataFrame(
-          {"변수명 (Feature)": X_cols, "회귀 계수 (Coefficient)": model.coef_}
+          {"변수명 (Feature)": X.columns, "회귀 계수 (Coefficient)": eval_model.coef_}
       ).sort_values(by="회귀 계수 (Coefficient)", ascending=False)
       st.dataframe(coef_df, use_container_width=True, hide_index=True)
-      st.success(f"📌 **모델 절편 (Intercept):** `{model.intercept_:.4f}`")
+      st.success(f"📌 **모델 절편 (Intercept):** `{eval_model.intercept_:.4f}`")
 
     with eval_tab2:
       st.subheader("모델 예측력 검증 그래프")
