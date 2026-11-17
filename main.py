@@ -19,7 +19,7 @@ plt.rcParams["axes.unicode_minus"] = False
 
 st.title("🏢 스마트 빌딩 에너지 소비량 전처리, EDA 및 예측 시스템")
 st.markdown("""
-결측치 확인, 이상치 정제(클리핑), 독립변수 전수 EDA를 거쳐, **`SquareFootage`를 제외한 변수들**로 다중 선형 회귀 모델을 구축하고 실시간 시뮬레이션 및 최종 모델 평가를 수행합니다.
+결측치 확인, 이상치 정제(클리핑), 독립변수 전수 EDA를 거쳐, **건물 면적(`SquareFootage`)을 포함한 핵심 변수들**로 다중 선형 회귀 모델을 구축하고 실시간 시뮬레이션 및 최종 모델 평가를 수행합니다.
 """)
 st.markdown("---")
 
@@ -244,18 +244,18 @@ try:
     st.pyplot(fig)
 
   # =====================================================================
-  # [5단계] 실시간 예측 시뮬레이터 (독립적으로 모델 학습 및 예측)
+  # [5단계] 실시간 예측 시뮬레이터 (SquareFootage 포함 모델 학습)
   # =====================================================================
   elif menu == "5단계: 실시간 예측 시뮬레이터":
     st.header("📌 5단계: 실시간 건물 에너지 소비량 예측 시뮬레이션")
     st.write(
-        "💡 안내: 모델 학습 시 요구사항에 따라 **`SquareFootage` 변수는"
-        " 제외**되었습니다."
+        "💡 안내: **건물 면적(`SquareFootage`)**을 포함한 전체 변수로 모델을"
+        " 학습하여 실시간 시뮬레이션을 수행합니다."
     )
 
     df_sim = st.session_state.get("df_cleaned", df_raw)
 
-    base_df = df_sim.drop(columns=["SquareFootage"], errors="ignore")
+    base_df = df_sim.copy()
     if "Timestamp" in base_df.columns:
       base_df = base_df.drop(columns=["Timestamp"])
 
@@ -273,7 +273,7 @@ try:
 
     sim_col1, sim_col2 = st.columns(2)
     with sim_col1:
-      st.subheader("🌡️ 수치형 환경 변수 조절")
+      st.subheader("🌡️ 수치형 환경 및 건물 변수 조절")
       in_temp = st.slider(
           "Temperature (온도)",
           float(df_raw["Temperature"].min()),
@@ -285,6 +285,12 @@ try:
           float(df_raw["Humidity"].min()),
           float(df_raw["Humidity"].max()),
           float(df_raw["Humidity"].mean()),
+      )
+      in_sqft = st.slider(
+          "SquareFootage (건물 면적)",
+          float(df_raw["SquareFootage"].min()),
+          float(df_raw["SquareFootage"].max()),
+          float(df_raw["SquareFootage"].mean()),
       )
       in_occ = st.slider(
           "Occupancy (재실 인원)",
@@ -315,6 +321,7 @@ try:
     user_input_raw = pd.DataFrame({
         "Temperature": [in_temp],
         "Humidity": [in_hum],
+        "SquareFootage": [in_sqft],
         "Occupancy": [in_occ],
         "RenewableEnergy": [in_reno],
         "HVACUsage": [in_hvac],
@@ -337,18 +344,18 @@ try:
     )
 
   # =====================================================================
-  # [6단계] 다중 선형 회귀 모델 최종 평가 (독립적으로 모델 학습 및 평가)
+  # [6단계] 다중 선형 회귀 모델 최종 평가 (SquareFootage 포함, R2, MSE, MAE)
   # =====================================================================
   elif menu == "6단계: 다중 선형 회귀 모델 최종 평가":
     st.header("📌 6단계: 다중 선형 회귀 모델 최종 성능 평가")
     st.write(
-        "학습된 모델의 성과 지표($R^2$, MSE, MAE)와 변수별 회귀 계수,"
-        " 실제값 vs 예측값 비교 그래프를 확인합니다."
+        "건물 면적(`SquareFootage`)이 포함된 모델의 성과 지표($R^2$, MSE,"
+        " MAE)와 변수별 회귀 계수, 실제값 vs 예측값 비교 그래프를 확인합니다."
     )
 
     df_eval = st.session_state.get("df_cleaned", df_raw)
 
-    base_df = df_eval.drop(columns=["SquareFootage"], errors="ignore")
+    base_df = df_eval.copy()
     if "Timestamp" in base_df.columns:
       base_df = base_df.drop(columns=["Timestamp"])
 
@@ -382,7 +389,9 @@ try:
     ])
 
     with eval_tab1:
-      st.subheader("변수별 회귀 계수(가중치) 확인 (`SquareFootage` 제외됨)")
+      st.subheader(
+          "변수별 회귀 계수(가중치) 확인 (`SquareFootage` 포함됨)"
+      )
       coef_df = pd.DataFrame(
           {"변수명 (Feature)": X.columns, "회귀 계수 (Coefficient)": eval_model.coef_}
       ).sort_values(by="회귀 계수 (Coefficient)", ascending=False)
